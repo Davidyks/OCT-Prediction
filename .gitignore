@@ -1,0 +1,5 @@
+.streamlit/
+__pycache__/
+*.keras
+*.h5
+*.npy
