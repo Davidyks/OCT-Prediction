@@ -22,31 +22,45 @@ MODEL_PATHS = {
 }
 WEIGHT_PATH = "ensemble_weights_3models.npy"
 
-DRIVE_EFF = "https://drive.google.com/uc?export=download&id=1PlxQAwYhGW4G7bXjcTQQlwfTMESLMKU9"
-DRIVE_RES = "https://drive.google.com/uc?export=download&id=1VTu50RYZ2--vKM9inNj64DYUG39B58ms"
-DRIVE_CNN = "https://drive.google.com/uc?export=download&id=1InXPfkfKjLHR-XL5XjCj0HpbuNjMtBVx"
-DRIVE_W   = "https://drive.google.com/uc?export=download&id=13TfIOlIkNbHv0FzLfBLygeFh6eYdjy8Q"
+ID_EFF = "1PlxQAwYhGW4G7bXjcTQQlwfTMESLMKU9"
+ID_RES = "1VTu50RYZ2--vKM9inNj64DYUG39B58ms"
+ID_CNN = "1InXPfkfKjLHR-XL5XjCj0HpbuNjMtBVx"
+ID_W   = "13TfIOlIkNbHv0FzLfBLygeFh6eYdjy8Q"
 
-@st.cache_resource
-def download_from_drive(url, filename):
-    if os.path.exists(filename):
-        print(f"{filename} already exists, skipping download.")
-        return
+def gdrive_download(id, filename):
+    URL = "https://drive.google.com/uc?export=download"
 
-    print(f"Downloading {filename} from Google Drive...")
-    response = requests.get(url, allow_redirects=True)
+    session = requests.Session()
+    response = session.get(URL, params={"id": id}, stream=True)
 
-    if response.status_code == 200:
-        with open(filename, "wb") as f:
-            f.write(response.content)
-        print(f"Saved {filename}")
-    else:
-        print(f"Failed to download {filename}: {response.status_code}")
+    def get_confirm_token(response):
+        for key, value in response.cookies.items():
+            if key.startswith("download_warning"):
+                return value
+        return None
 
-download_from_drive(DRIVE_EFF, "effnet_model.keras")
-download_from_drive(DRIVE_RES, "resnet_model.keras")
-download_from_drive(DRIVE_CNN, "cnn_model.keras")
-download_from_drive(DRIVE_W,   "ensemble_weights_3models.npy")
+    token = get_confirm_token(response)
+    if token:
+        response = session.get(
+            URL,
+            params={"id": id, "confirm": token},
+            stream=True
+        )
+
+    CHUNK = 32768
+    with open(filename, "wb") as f:
+        for chunk in response.iter_content(CHUNK):
+            if chunk:
+                f.write(chunk)
+
+    print("Downloaded:", filename)
+
+@st.cache_resource   
+def download_all_models():
+    gdrive_download(ID_EFF, MODEL_PATHS["effnet"])
+    gdrive_download(ID_RES, MODEL_PATHS["resnet"])
+    gdrive_download(ID_CNN, MODEL_PATHS["cnn"])
+    gdrive_download(ID_W, WEIGHT_PATH)
 
 def load_all_models():
     try:
