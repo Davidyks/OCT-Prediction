@@ -1,5 +1,7 @@
 streamlit
-tensorflow>=2.10
 numpy
+tensorflow
 pillow
-opencv-python
+pandas
+huggingface_hub
+requests
