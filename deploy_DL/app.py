@@ -7,6 +7,16 @@ from tensorflow.keras.applications import efficientnet_v2, resnet_v2
 from PIL import Image
 import requests
 import os
+from huggingface_hub import hf_hub_download
+
+HF_REPO = "david-arifin/OCT-Prediction"
+
+MODEL_FILES = {
+    "effnet": "effnet_model.keras",
+    "resnet": "resnet_model.keras",
+    "cnn": "cnn_model.keras",
+    "weights": "ensemble_weights_3models.npy"
+}
 
 INPUT_SIZE = (224, 224)
 NUM_CLASSES = 8
@@ -15,84 +25,60 @@ CLASS_NAMES = [
 ]
 
 DEFAULT_TTA = 5
-MODEL_PATHS = {
-    "effnet": "effnet_model.keras",
-    "resnet": "resnet_model.keras",
-    "cnn": "cnn_model.keras",
-}
-WEIGHT_PATH = "ensemble_weights_3models.npy"
+# MODEL_PATHS = {
+#     "effnet": "effnet_model.keras",
+#     "resnet": "resnet_model.keras",
+#     "cnn": "cnn_model.keras", 
+#     }
+# WEIGHT_PATH = "ensemble_weights_3models.npy"
 
-ID_EFF = "1PlxQAwYhGW4G7bXjcTQQlwfTMESLMKU9"
-ID_RES = "1VTu50RYZ2--vKM9inNj64DYUG39B58ms"
-ID_CNN = "1InXPfkfKjLHR-XL5XjCj0HpbuNjMtBVx"
-ID_W   = "13TfIOlIkNbHv0FzLfBLygeFh6eYdjy8Q"
-
-def gdrive_download(id, filename):
-    URL = "https://drive.google.com/uc?export=download"
-
-    session = requests.Session()
-    response = session.get(URL, params={"id": id}, stream=True)
-
-    def get_confirm_token(response):
-        for key, value in response.cookies.items():
-            if key.startswith("download_warning"):
-                return value
-        return None
-
-    token = get_confirm_token(response)
-    if token:
-        response = session.get(
-            URL,
-            params={"id": id, "confirm": token},
-            stream=True
-        )
-
-    CHUNK = 32768
-    with open(filename, "wb") as f:
-        for chunk in response.iter_content(CHUNK):
-            if chunk:
-                f.write(chunk)
-
-    print("Downloaded:", filename)
-
-@st.cache_resource   
+@st.cache_resource
 def download_all_models():
-    gdrive_download(ID_EFF, MODEL_PATHS["effnet"])
-    gdrive_download(ID_RES, MODEL_PATHS["resnet"])
-    gdrive_download(ID_CNN, MODEL_PATHS["cnn"])
-    gdrive_download(ID_W, WEIGHT_PATH)
+    paths = {}
+    for key, filename in MODEL_FILES.items():
+        paths[key] = hf_hub_download(repo_id=HF_REPO, filename=filename)
+    return paths
 
 def load_all_models():
-    try:
-        eff = keras.models.load_model(MODEL_PATHS["effnet"])
-    except Exception as e:
-        st.error(f"Failed loading EfficientNet model: {e}")
-        raise
+    # try:
+    #     eff = keras.models.load_model(MODEL_PATHS["effnet"])
+    # except Exception as e:
+    #     st.error(f"Failed loading EfficientNet model: {e}")
+    #     raise
 
-    try:
-        res = keras.models.load_model(MODEL_PATHS["resnet"])
-    except Exception as e:
-        st.error(f"Failed loading ResNet model: {e}")
-        raise
+    # try:
+    #     res = keras.models.load_model(MODEL_PATHS["resnet"])
+    # except Exception as e:
+    #     st.error(f"Failed loading ResNet model: {e}")
+    #     raise
 
-    try:
-        cnn = keras.models.load_model(MODEL_PATHS["cnn"])
-    except Exception as e:
-        st.error(f"Failed loading CNN model: {e}")
-        raise
+    # try:
+    #     cnn = keras.models.load_model(MODEL_PATHS["cnn"])
+    # except Exception as e:
+    #     st.error(f"Failed loading CNN model: {e}")
+    #     raise
 
-    try:
-        w = np.load(WEIGHT_PATH)
-        w = w.astype(np.float32)
-        if w.ndim == 1 and w.size == 3:
-            w = w / np.sum(w)
-        else:
-            st.warning("Loaded PSO weights shape unexpected, normalizing anyway.")
-            w = np.abs(w.flatten())[:3]
-            w = w / np.sum(w)
-    except Exception as e:
-        st.error(f"Failed loading PSO weights ({WEIGHT_PATH}): {e}")
-        w = np.ones(3, dtype=np.float32) / 3.0
+    # try:
+    #     w = np.load(WEIGHT_PATH)
+    #     w = w.astype(np.float32)
+    #     if w.ndim == 1 and w.size == 3:
+    #         w = w / np.sum(w)
+    #     else:
+    #         st.warning("Loaded PSO weights shape unexpected, normalizing anyway.")
+    #         w = np.abs(w.flatten())[:3]
+    #         w = w / np.sum(w)
+    # except Exception as e:
+    #     st.error(f"Failed loading PSO weights ({WEIGHT_PATH}): {e}")
+    #     w = np.ones(3, dtype=np.float32) / 3.0
+
+    paths = download_all_models()
+
+    eff = keras.models.load_model(paths["effnet"])
+    res = keras.models.load_model(paths["resnet"])
+    cnn = keras.models.load_model(paths["cnn"])
+
+    w = np.load(paths["weights"]).astype(np.float32)
+    w = w / np.sum(w)
 
     return eff, res, cnn, w
 
